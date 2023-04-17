@@ -1,4 +1,4 @@
-const User = require('./authModel')
+const User = require('../Models/userModel')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
 const { promisify } = require('util');
@@ -44,6 +44,7 @@ exports.signUp = async (req, res) => {
     firstname: req.body.firstname,
     lastname: req.body.lastname,
     email: req.body.email,
+    role: req.body.role,
     password: req.body.password,
     confirmPassword: req.body.confirmPassword
    })
@@ -67,3 +68,30 @@ exports.login = async (req, res, next) => {
     // 3) If everything ok, send token to client
     createSendToken(user, 200, res);
   };
+  exports.restrictTo = (...roles) => {
+       return (req, res, next) => {
+        if(!roles.includes(req.user.role)){
+          return next(res.json({message: 'You do not have permission to carry out this action'}))
+        }
+        next();
+       }
+  }
+  exports.protect = async (req, res, next) => {
+    let token;
+    if(
+      req.headers.authorization && 
+      req.headers.authorization.startsWith('Bearer')
+    ) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    if(!token){
+      return next(res.json({message: 'not logged in'}))
+    }
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET)
+    const currentUser = await User.findById(decoded.id);
+    if(!currentUser){
+      return next(res.json({message: 'this user does not exist anymore'}))
+    }
+    req.user = currentUser;
+    next();
+  }
